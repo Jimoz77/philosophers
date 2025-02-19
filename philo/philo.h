@@ -13,8 +13,11 @@ int	ft_atoi(const char *str);
 typedef struct s_philo
 {
 	int id;
-	int launch_time; // heure de lancement du philo en ms
-	int time_to_die; // temps en ms avant que le philo meurt
+	long current_time; // temps actuel depuis le dernier repas
+	long launch_time; // temps actuel depuis le debut du programme
+	long time_to_die; // temps en ms avant que le philo meurt
+	long time_to_eat; // temps en ms pour manger
+	long time_to_sleep; // temps en ms pour dormir
 	int philo_count; // fonctionnel (jsuis lboss)
 	int left_fork; // il faut peut utiliser pthread_mutex_t a la place de int
 	int right_fork; // une fois les deux fork modifié il faut aussi adapter le code

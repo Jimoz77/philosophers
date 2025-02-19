@@ -6,7 +6,7 @@
 /*   By: jimpa <jimpa@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 17:19:38 by jimpa             #+#    #+#             */
-/*   Updated: 2025/02/18 20:15:52 by jimpa            ###   ########.fr       */
+/*   Updated: 2025/02/19 19:17:20 by jimpa            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,7 +28,7 @@ int time_to_die(long launch_time, long time_to_die)
 	//if (elapsed_time > time_to_die)
 	//	return (1);
 	//return (0);
-	printf("current_time = %ld | launch_time = %ld | diff = %ld |time_to_die = %ld\n", current_time, launch_time,(current_time - launch_time),time_to_die);
+	printf("| diff = %ld |\n",(current_time - launch_time));
 	return ((current_time - launch_time) > time_to_die);
 }
 
@@ -47,11 +47,12 @@ void	mutex_des(t_philo *philo, int nb) // full random
 	free(philo);
 }
 
-int set_hungriest(t_philo *philos) // fonc qui peut servir mais pue actuellement la merde
-{
+int set_hungriest(t_philo *philos) // fonctionne mais engendre data race 
+{ // va savoir pourquoi mais l'algo trie deja les plus affamés sans avoir a utiliser cette fonction
     int i = 0;
     int hungriest = 0;
     int small_count;
+	int philo_count;
 
     // Initialiser small_count avec le eat_count du premier philosophe
     pthread_mutex_lock(&philos[0].eat_mutex);
@@ -61,31 +62,31 @@ int set_hungriest(t_philo *philos) // fonc qui peut servir mais pue actuellement
     // Parcourir tous les philosophes pour trouver le plus affamé
     for (i = 1; i < philos[i].philo_count; i++)
     {
-        pthread_mutex_lock(&philos[i].eat_mutex);
+		pthread_mutex_lock(&philos[i].eat_mutex);
         if (philos[i].eat_count < small_count)
         {
             small_count = philos[i].eat_count;
             hungriest = i;
         }
-        pthread_mutex_unlock(&philos[i].eat_mutex);
+		pthread_mutex_unlock(&philos[i].eat_mutex);
     }
 
-    //printf("hungriest = %d | id = %d\n", hungriest, philos[hungriest].id);
+    //printf("Hungriest philo ID = %d\n", philos[hungriest].id);
     return philos[hungriest].id;
 }
 void   philo_think(t_philo *philo) // la meilleur fonc du projet
 {
-	printf("%d is thinking\n", philo->id);
-	usleep(1000000);
+	printf("%ldms %d is thinking\n",philo->current_time - philo->launch_time, philo->id);
+	//usleep(1000000);
 }
 void  philo_sleep(t_philo *philo) // béton
 {
-	printf("%d is sleeping\n", philo->id);
-	usleep(1000000);
+	printf("%ldms %d is sleeping\n",philo->current_time - philo->launch_time, philo->id);
+	usleep(philo->time_to_sleep * 1000);
 }
 
 
-void	philo_eat(t_philo *philo)
+void	philo_eat(t_philo *philo) // attention probleme de décalage d'une ms
 {
 	if(philo->id % 2 == 0)
 	{
@@ -97,12 +98,13 @@ void	philo_eat(t_philo *philo)
 		pthread_mutex_lock(&philo->forks[philo->right_fork]);
 		pthread_mutex_lock(&philo->forks[philo->left_fork]);
 	}
-	//pthread_mutex_lock(&philo->eat_mutex);
+
+	pthread_mutex_lock(&philo->eat_mutex); 
 	philo->eat_count++;
-	printf("%d is eating       (%d time)\n", philo->id, philo->eat_count);
-	usleep(1000000);
-	philo->launch_time = get_current_time_in_ms();
-	//pthread_mutex_unlock(&philo->eat_mutex);
+	printf("%ldms %d is eating       (%d time)\n", philo->current_time - philo->launch_time, philo->id, philo->eat_count);
+	pthread_mutex_unlock(&philo->eat_mutex);
+	usleep(philo->time_to_eat * 1000);
+	philo->current_time = get_current_time_in_ms();
 	pthread_mutex_unlock(&philo->forks[philo->left_fork]);
 	pthread_mutex_unlock(&philo->forks[philo->right_fork]);
 }
@@ -113,22 +115,25 @@ void	*philo_life(void *arg) // gro delbor jcomprend r // surement plus simple av
 	t_philo	*philo;
 
 	philo = (t_philo *)arg;
-	while (!time_to_die(philo->launch_time, philo->time_to_die))
+	pthread_mutex_lock(&philo->eat_mutex); // a tester
+	if(!philo->current_time)
+		philo->current_time = get_current_time_in_ms();
+	if (!philo->launch_time)
+		philo->launch_time = get_current_time_in_ms();
+	pthread_mutex_unlock(&philo->eat_mutex); // a tester
+	while (!time_to_die(philo->current_time, philo->time_to_die))
 	{
-		if (philo->id == set_hungriest(philo)) // c est la que ca se passe (mdr rien du tout)
-		{
-		 	philo_eat(philo);
-		} 
-		//philo_eat(philo);
+		//if (philo->id == set_hungriest(philo)) // c est la que ca se passe (mdr rien du tout)
+		//{
+		philo_eat(philo);
+		//} 
 		philo_sleep(philo);
-		//usleep(1000000);
 		philo_think(philo);
-		//usleep(1000000);
 	}
 	printf("%d is dead\n", philo->id);
 }
 
-t_philo	*init_philo(int nb, long time_to_die) // pue la merde
+t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sleep) // pue la merde
 {
 	t_philo	*philo;
 	int		i;
@@ -159,14 +164,15 @@ t_philo	*init_philo(int nb, long time_to_die) // pue la merde
 		philo[i].right_fork = (i + 1) % nb;
 		philo[i].philo_count = nb;
 		philo[i].eat_count = 0;
-		philo[i].launch_time = launch_time;
+		philo[i].time_to_eat = time_to_eat;
+		philo[i].time_to_sleep = time_to_sleep;
 		philo[i].time_to_die = time_to_die;
 		philo[i].forks = forks;
 		pthread_mutex_init(&philo[i].eat_mutex, NULL);
 		pthread_create(&philo[i].thread, NULL, philo_life, &philo[i]);
 		i++;
 	}
-	philo[i].eat_count = 0; // ATTENTION J ai du rajouter ca ici psq sinon derniere valeur de eat_count etait random surment d autre probleme avec les autres valeurs
+	//philo[i].eat_count = 0; // ATTENTION J ai du rajouter ca ici psq sinon derniere valeur de eat_count etait random surment d autre probleme avec les autres valeurs
 	i = 0;
 	while (i < nb)
 	{
@@ -182,12 +188,16 @@ int	main(int ac, char **av)// main qui pue la classe
 	t_philo	*philo;
 	int nb;
 	long die_time;
+	long time_to_eat;
+	long time_to_sleep;
 
-	if (ac == 3) // a changer
+	if (ac == 5) // a changer
 	{
 		nb = ft_atoi(av[1]);
 		die_time = ft_atoi(av[2]); // atoi doit peut etre gerer les long pour les ms
-		philo = init_philo(nb, die_time);
+		time_to_eat = ft_atoi(av[3]);
+		time_to_sleep = ft_atoi(av[4]);
+		philo = init_philo(nb, die_time,time_to_eat, time_to_sleep);
 		//thread_join(philo, ft_atoi(av[1]));
 		if (!philo)
 			return (1);
