@@ -18,10 +18,12 @@ typedef struct s_philo
 	long time_to_die; // temps en ms avant que le philo meurt
 	long time_to_eat; // temps en ms pour manger
 	long time_to_sleep; // temps en ms pour dormir
+	long last_meal; // temps du dernier repas
 	int philo_count; // fonctionnel (jsuis lboss)
 	int left_fork; // il faut peut utiliser pthread_mutex_t a la place de int
 	int right_fork; // une fois les deux fork modifié il faut aussi adapter le code
 	int eat_count; 
+	long must_eat; // nombre de repas a faire
 	pthread_mutex_t eat_mutex; // jsp ski branle la mais c est surement important
 	pthread_mutex_t	*forks; // sera surement useless
 	pthread_t thread; // c est le bordel mais insh on va y arriver

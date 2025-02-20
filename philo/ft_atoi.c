@@ -2,8 +2,8 @@
 int	ft_atoi(const char *str)
 {
 	int	i;
-	int	is_nega;
-	int	res;
+	long	is_nega;
+	long	res;
 
 	i = 0;
 	res = 0;

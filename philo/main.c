@@ -6,7 +6,7 @@
 /*   By: jimpa <jimpa@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 17:19:38 by jimpa             #+#    #+#             */
-/*   Updated: 2025/02/19 19:17:20 by jimpa            ###   ########.fr       */
+/*   Updated: 2025/02/20 20:28:22 by jimpa            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,19 +16,14 @@ long get_current_time_in_ms()
 {
 	struct timeval current_time;
 	gettimeofday(&current_time, NULL);
-	return ((current_time.tv_sec * 1000) + (current_time.tv_usec / 1000));
+	return (current_time.tv_sec * 1000 + current_time.tv_usec / 1000);
 }
 int time_to_die(long launch_time, long time_to_die)
 {
 	long current_time;
-	//long elapsed_time;
 
 	current_time = get_current_time_in_ms();
-	//elapsed_time = current_time - launch_time;
-	//if (elapsed_time > time_to_die)
-	//	return (1);
-	//return (0);
-	printf("| diff = %ld |\n",(current_time - launch_time));
+	//printf("| diff = %ld |\n",(current_time - launch_time));
 	return ((current_time - launch_time) > time_to_die);
 }
 
@@ -76,19 +71,20 @@ int set_hungriest(t_philo *philos) // fonctionne mais engendre data race
 }
 void   philo_think(t_philo *philo) // la meilleur fonc du projet
 {
+	philo->current_time = get_current_time_in_ms();
 	printf("%ldms %d is thinking\n",philo->current_time - philo->launch_time, philo->id);
-	//usleep(1000000);
 }
 void  philo_sleep(t_philo *philo) // béton
 {
-	printf("%ldms %d is sleeping\n",philo->current_time - philo->launch_time, philo->id);
+	philo->current_time = get_current_time_in_ms();
+	printf("%ldms %d is sleeping\n",philo->current_time - philo->launch_time, philo->id); // verifier si mettre apres le usleep
 	usleep(philo->time_to_sleep * 1000);
 }
 
 
 void	philo_eat(t_philo *philo) // attention probleme de décalage d'une ms
 {
-	if(philo->id % 2 == 0)
+	if(philo->id % 2 == 0) // fork de gauche en premier si id pair
 	{
 		pthread_mutex_lock(&philo->forks[philo->left_fork]);
 		pthread_mutex_lock(&philo->forks[philo->right_fork]);
@@ -98,13 +94,15 @@ void	philo_eat(t_philo *philo) // attention probleme de décalage d'une ms
 		pthread_mutex_lock(&philo->forks[philo->right_fork]);
 		pthread_mutex_lock(&philo->forks[philo->left_fork]);
 	}
-
-	pthread_mutex_lock(&philo->eat_mutex); 
-	philo->eat_count++;
-	printf("%ldms %d is eating       (%d time)\n", philo->current_time - philo->launch_time, philo->id, philo->eat_count);
-	pthread_mutex_unlock(&philo->eat_mutex);
-	usleep(philo->time_to_eat * 1000);
+	//pthread_mutex_lock(&philo->eat_mutex); 
 	philo->current_time = get_current_time_in_ms();
+	printf("%ldms %d has taken a fork\n", philo->current_time - philo->launch_time, philo->id);
+	printf("%ldms %d has taken a fork\n", philo->current_time - philo->launch_time, philo->id);
+	printf("%ldms %d is eating       (%d time)\n", philo->current_time - philo->launch_time, philo->id, philo->eat_count);
+	philo->last_meal = philo->current_time;
+	philo->eat_count++;
+	usleep(philo->time_to_eat * 1000);
+	//pthread_mutex_unlock(&philo->eat_mutex);
 	pthread_mutex_unlock(&philo->forks[philo->left_fork]);
 	pthread_mutex_unlock(&philo->forks[philo->right_fork]);
 }
@@ -116,23 +114,19 @@ void	*philo_life(void *arg) // gro delbor jcomprend r // surement plus simple av
 
 	philo = (t_philo *)arg;
 	pthread_mutex_lock(&philo->eat_mutex); // a tester
-	if(!philo->current_time)
-		philo->current_time = get_current_time_in_ms();
-	if (!philo->launch_time)
+	philo->last_meal = get_current_time_in_ms();
+	if(!philo->launch_time)
 		philo->launch_time = get_current_time_in_ms();
 	pthread_mutex_unlock(&philo->eat_mutex); // a tester
-	while (!time_to_die(philo->current_time, philo->time_to_die))
+	 while (!time_to_die(philo->last_meal, philo->time_to_die))
 	{
-		//if (philo->id == set_hungriest(philo)) // c est la que ca se passe (mdr rien du tout)
-		//{
 		philo_eat(philo);
-		//} 
 		philo_sleep(philo);
 		philo_think(philo);
 	}
 	printf("%d is dead\n", philo->id);
+	exit(0); // peut etre interdit
 }
-
 t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sleep) // pue la merde
 {
 	t_philo	*philo;
@@ -172,7 +166,6 @@ t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sle
 		pthread_create(&philo[i].thread, NULL, philo_life, &philo[i]);
 		i++;
 	}
-	//philo[i].eat_count = 0; // ATTENTION J ai du rajouter ca ici psq sinon derniere valeur de eat_count etait random surment d autre probleme avec les autres valeurs
 	i = 0;
 	while (i < nb)
 	{
@@ -198,7 +191,6 @@ int	main(int ac, char **av)// main qui pue la classe
 		time_to_eat = ft_atoi(av[3]);
 		time_to_sleep = ft_atoi(av[4]);
 		philo = init_philo(nb, die_time,time_to_eat, time_to_sleep);
-		//thread_join(philo, ft_atoi(av[1]));
 		if (!philo)
 			return (1);
 		mutex_des(philo, nb); // mdr comme si ca leakait pas 
