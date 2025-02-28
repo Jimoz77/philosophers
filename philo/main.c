@@ -6,26 +6,11 @@
 /*   By: jimpa <jimpa@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 17:19:38 by jimpa             #+#    #+#             */
-/*   Updated: 2025/02/20 20:28:22 by jimpa            ###   ########.fr       */
+/*   Updated: 2025/02/27 18:54:22 by jimpa            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "philo.h"
-
-long get_current_time_in_ms()
-{
-	struct timeval current_time;
-	gettimeofday(&current_time, NULL);
-	return (current_time.tv_sec * 1000 + current_time.tv_usec / 1000);
-}
-int time_to_die(long launch_time, long time_to_die)
-{
-	long current_time;
-
-	current_time = get_current_time_in_ms();
-	//printf("| diff = %ld |\n",(current_time - launch_time));
-	return ((current_time - launch_time) > time_to_die);
-}
 
 void	mutex_des(t_philo *philo, int nb) // full random
 {
@@ -34,15 +19,77 @@ void	mutex_des(t_philo *philo, int nb) // full random
 	i = 0;
 	while (i < nb)
 	{
-		pthread_mutex_destroy(philo[i].forks);
+		//pthread_mutex_destroy(philo[i].forks);
 		pthread_mutex_destroy(&philo[i].eat_mutex);
+		//free(philo[i].forks);
 		i++;
 	}
-	//free(philo->forks);
-	free(philo);
+	//free(philo);
 }
 
-int set_hungriest(t_philo *philos) // fonctionne mais engendre data race 
+
+long get_current_time_in_ms()
+{
+	struct timeval current_time;
+	gettimeofday(&current_time, NULL);
+	return (current_time.tv_sec * 1000 + current_time.tv_usec / 1000);
+}
+int time_to_die(long last_meal, long time_to_die, long current_time, long launch_time)
+{
+	long diff;
+	diff = (current_time - launch_time) - last_meal;
+	//printf("| diff = %ld |\n", diff);
+	//printf("| current_time = %ld |\n", current_time - launch_time);
+	//printf("| last_meal = %ld |\n", last_meal); */
+	return(diff >= time_to_die);
+}
+void *monitor_philo(void *arg) {
+    t_philo *philo = (t_philo *)arg;
+    long last_meal_time = philo->last_meal;
+	if(!philo->launch_time)
+		philo->launch_time = get_current_time_in_ms();
+
+    while (1) {
+        philo->current_time = get_current_time_in_ms();
+        if (time_to_die(philo->last_meal, philo->time_to_die, get_current_time_in_ms(), philo->launch_time)) {
+            printf("%011ld %d died\n", philo->current_time - philo->launch_time, philo->id);
+            mutex_des(philo, philo->philo_count);
+            exit(0);
+        }
+        if (last_meal_time != philo->last_meal) {
+            //printf("Philosopher %d started eating at %ld ms\n", philo->id, philo->last_meal);
+            last_meal_time = philo->last_meal;
+        }
+        usleep(1000); // Attendre 10ms avant de vérifier à nouveau
+    }
+    return NULL;
+}
+
+
+t_philo *find_philo_to_eat(t_philo *philos, int philo_count) {
+    t_philo *philo_to_eat = NULL;
+    long min_time_to_die = 0;
+    int min_eat_count = 0;
+
+    for (int i = 0; i < philo_count; i++) {
+        long time_to_die = philos[i].time_to_die - (get_current_time_in_ms() - philos[i].last_meal);
+        if (time_to_die < min_time_to_die || (time_to_die == min_time_to_die && philos[i].eat_count < min_eat_count)) {
+            min_time_to_die = time_to_die;
+            min_eat_count = philos[i].eat_count;
+            philo_to_eat = &philos[i];
+        }
+    }
+    return philo_to_eat;
+}
+
+
+
+
+
+
+
+
+/* int set_hungriest(t_philo *philos) // fonctionne mais engendre data race 
 { // va savoir pourquoi mais l'algo trie deja les plus affamés sans avoir a utiliser cette fonction
     int i = 0;
     int hungriest = 0;
@@ -68,23 +115,54 @@ int set_hungriest(t_philo *philos) // fonctionne mais engendre data race
 
     //printf("Hungriest philo ID = %d\n", philos[hungriest].id);
     return philos[hungriest].id;
-}
+} */
 void   philo_think(t_philo *philo) // la meilleur fonc du projet
 {
 	philo->current_time = get_current_time_in_ms();
-	printf("%ldms %d is thinking\n",philo->current_time - philo->launch_time, philo->id);
+	usleep(100);
+	printf("%ld %d is thinking\n",philo->current_time - philo->launch_time, philo->id);
 }
 void  philo_sleep(t_philo *philo) // béton
 {
 	philo->current_time = get_current_time_in_ms();
-	printf("%ldms %d is sleeping\n",philo->current_time - philo->launch_time, philo->id); // verifier si mettre apres le usleep
+	printf("%ld %d is sleeping\n",philo->current_time - philo->launch_time, philo->id); // verifier si mettre apres le usleep
 	usleep(philo->time_to_sleep * 1000);
 }
 
 
 void	philo_eat(t_philo *philo) // attention probleme de décalage d'une ms
 {
-	if(philo->id % 2 == 0) // fork de gauche en premier si id pair
+	int first_fork;
+	int second_fork;
+
+	if(!philo->last_used_fork)
+		philo->last_used_fork = -1;
+
+	if (philo->philo_count == 1)
+	{
+		printf("%ld %d died\n", philo->time_to_die, philo->id);
+		mutex_des(philo, philo->philo_count);
+		exit(0);
+	}
+	if (philo->left_fork < philo->right_fork)
+	{
+		first_fork = philo->left_fork;
+		second_fork = philo->right_fork;
+	}
+	else
+	{
+		first_fork = philo->right_fork;
+		second_fork = philo->left_fork;
+	}
+	/* if (philo->last_used_fork == first_fork)
+	{
+		int temp = first_fork;
+		first_fork = second_fork;
+		second_fork = temp;
+	} */
+	
+
+	/* if(philo->left_fork < philo->right_fork) // fork de gauche en premier si id pair
 	{
 		pthread_mutex_lock(&philo->forks[philo->left_fork]);
 		pthread_mutex_lock(&philo->forks[philo->right_fork]);
@@ -94,17 +172,36 @@ void	philo_eat(t_philo *philo) // attention probleme de décalage d'une ms
 		pthread_mutex_lock(&philo->forks[philo->right_fork]);
 		pthread_mutex_lock(&philo->forks[philo->left_fork]);
 	}
+ */
+	pthread_mutex_lock(&philo->forks[first_fork]);
+	pthread_mutex_lock(&philo->forks[second_fork]);
+	//philo->last_used_fork = second_fork;
 	//pthread_mutex_lock(&philo->eat_mutex); 
 	philo->current_time = get_current_time_in_ms();
-	printf("%ldms %d has taken a fork\n", philo->current_time - philo->launch_time, philo->id);
-	printf("%ldms %d has taken a fork\n", philo->current_time - philo->launch_time, philo->id);
-	printf("%ldms %d is eating       (%d time)\n", philo->current_time - philo->launch_time, philo->id, philo->eat_count);
-	philo->last_meal = philo->current_time;
+	/* if(time_to_die(philo->last_meal, philo->time_to_die, get_current_time_in_ms(), philo->launch_time))
+		{
+			printf("%011ld %d died\n", philo->current_time - philo->launch_time,philo->id);
+			mutex_des(philo, philo->philo_count);
+			exit(0);
+		} */
+	printf("%ld %d has taken a fork\n", philo->current_time - philo->launch_time, philo->id);
+	printf("%ld %d has taken a fork\n", philo->current_time - philo->launch_time, philo->id);
+	printf("%ld %d is eating\n", philo->current_time - philo->launch_time, philo->id);
+	
+	pthread_mutex_lock(&philo->eat_mutex);
+	philo->last_meal = philo->current_time - philo->launch_time;
 	philo->eat_count++;
 	usleep(philo->time_to_eat * 1000);
-	//pthread_mutex_unlock(&philo->eat_mutex);
-	pthread_mutex_unlock(&philo->forks[philo->left_fork]);
-	pthread_mutex_unlock(&philo->forks[philo->right_fork]);
+	pthread_mutex_unlock(&philo->eat_mutex);
+
+
+	philo->last_used_fork = second_fork;
+	pthread_mutex_unlock(&philo->forks[first_fork]);
+	pthread_mutex_unlock(&philo->forks[second_fork]);
+
+
+	/* pthread_mutex_unlock(&philo->forks[philo->left_fork]);
+	pthread_mutex_unlock(&philo->forks[philo->right_fork]); */
 }
 
 
@@ -114,28 +211,28 @@ void	*philo_life(void *arg) // gro delbor jcomprend r // surement plus simple av
 
 	philo = (t_philo *)arg;
 	pthread_mutex_lock(&philo->eat_mutex); // a tester
-	philo->last_meal = get_current_time_in_ms();
+	philo->last_meal = 0;
 	if(!philo->launch_time)
 		philo->launch_time = get_current_time_in_ms();
 	pthread_mutex_unlock(&philo->eat_mutex); // a tester
-	 while (!time_to_die(philo->last_meal, philo->time_to_die))
+	 while ((philo->eat_count < philo->must_eat || philo->must_eat == 0))
 	{
 		philo_eat(philo);
 		philo_sleep(philo);
 		philo_think(philo);
 	}
-	printf("%d is dead\n", philo->id);
+	printf("end of thread\n");
+	mutex_des(philo, philo->philo_count);
 	exit(0); // peut etre interdit
 }
-t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sleep) // pue la merde
+t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sleep, int must_eat) // pue la merde
 {
 	t_philo	*philo;
 	int		i;
-	long	launch_time;
 	pthread_mutex_t *forks;
 
 	i = 0;
-	launch_time = get_current_time_in_ms();
+
 	philo = malloc(sizeof(t_philo) * nb);
 	if (!philo)
 		return (NULL);
@@ -153,7 +250,7 @@ t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sle
 	i = 0;	
 	while (i < nb)
 	{
-		philo[i].id = i;
+		philo[i].id = i + 1;
 		philo[i].left_fork = i;
 		philo[i].right_fork = (i + 1) % nb;
 		philo[i].philo_count = nb;
@@ -162,7 +259,10 @@ t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sle
 		philo[i].time_to_sleep = time_to_sleep;
 		philo[i].time_to_die = time_to_die;
 		philo[i].forks = forks;
+		if (must_eat)
+			philo[i].must_eat = must_eat;
 		pthread_mutex_init(&philo[i].eat_mutex, NULL);
+		pthread_create(&philo[i].monitor_thread, NULL, monitor_philo, &philo[i]);
 		pthread_create(&philo[i].thread, NULL, philo_life, &philo[i]);
 		i++;
 	}
@@ -170,6 +270,7 @@ t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sle
 	while (i < nb)
 	{
 		pthread_join(philo[i].thread, NULL); // surement pas comme ca qu on l utilise
+		pthread_join(philo[i].monitor_thread, NULL);
 		i++;
 	}
 	return (philo);
@@ -183,14 +284,20 @@ int	main(int ac, char **av)// main qui pue la classe
 	long die_time;
 	long time_to_eat;
 	long time_to_sleep;
+	int must_eat;
 
-	if (ac == 5) // a changer
+	if (ac == 5 || ac == 6) // a changer
 	{
 		nb = ft_atoi(av[1]);
 		die_time = ft_atoi(av[2]); // atoi doit peut etre gerer les long pour les ms
 		time_to_eat = ft_atoi(av[3]);
 		time_to_sleep = ft_atoi(av[4]);
-		philo = init_philo(nb, die_time,time_to_eat, time_to_sleep);
+		if (ac == 6)
+		{
+			must_eat = ft_atoi(av[5]);
+		}
+
+		philo = init_philo(nb, die_time,time_to_eat, time_to_sleep, must_eat);
 		if (!philo)
 			return (1);
 		mutex_des(philo, nb); // mdr comme si ca leakait pas 

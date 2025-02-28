@@ -13,6 +13,7 @@ int	ft_atoi(const char *str);
 typedef struct s_philo
 {
 	int id;
+	int hungriest;
 	long current_time; // temps actuel depuis le dernier repas
 	long launch_time; // temps actuel depuis le debut du programme
 	long time_to_die; // temps en ms avant que le philo meurt
@@ -23,9 +24,11 @@ typedef struct s_philo
 	int left_fork; // il faut peut utiliser pthread_mutex_t a la place de int
 	int right_fork; // une fois les deux fork modifié il faut aussi adapter le code
 	int eat_count; 
-	long must_eat; // nombre de repas a faire
+	int last_used_fork; // a voir si on garde
+	int must_eat; // nombre de repas a faire
 	pthread_mutex_t eat_mutex; // jsp ski branle la mais c est surement important
 	pthread_mutex_t	*forks; // sera surement useless
+	pthread_t monitor_thread;
 	pthread_t thread; // c est le bordel mais insh on va y arriver
 } t_philo;
 
