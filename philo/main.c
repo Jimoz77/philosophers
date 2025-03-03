@@ -6,11 +6,40 @@
 /*   By: jimpa <jimpa@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 17:19:38 by jimpa             #+#    #+#             */
-/*   Updated: 2025/02/27 18:54:22 by jimpa            ###   ########.fr       */
+/*   Updated: 2025/03/03 22:27:48 by jimpa            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "philo.h"
+
+int	checkif_end(void *arg)
+{
+	t_philo *philo = (t_philo *)arg;
+	int i = 0;
+	
+	while (i < philo->philo_count)
+	{
+		if(philo[i].end == 1)
+			return (1);
+		i++;
+	}
+	return (0);
+}
+void *end_of_thread(void *arg)
+{
+	t_philo *philo = (t_philo *)arg;
+	int i = 0;
+
+	while (i < (philo->philo_count - 1))
+	{
+		philo[i].end = 1;
+		i++;
+	}
+
+	/* pthread_join(philo->thread, NULL);
+	pthread_join(philo->monitor_thread, NULL); */
+	return (NULL);
+}
 
 void	mutex_des(t_philo *philo, int nb) // full random
 {
@@ -19,12 +48,12 @@ void	mutex_des(t_philo *philo, int nb) // full random
 	i = 0;
 	while (i < nb)
 	{
-		//pthread_mutex_destroy(philo[i].forks);
 		pthread_mutex_destroy(&philo[i].eat_mutex);
-		//free(philo[i].forks);
+		pthread_mutex_destroy(&philo->forks[i]);
+		//free(&philo[i]);
 		i++;
 	}
-	//free(philo);
+	free(philo->forks);
 }
 
 
@@ -49,12 +78,13 @@ void *monitor_philo(void *arg) {
 	if(!philo->launch_time)
 		philo->launch_time = get_current_time_in_ms();
 
-    while (1) {
+    while (checkif_end(arg) == 0) {
         philo->current_time = get_current_time_in_ms();
+		
         if (time_to_die(philo->last_meal, philo->time_to_die, get_current_time_in_ms(), philo->launch_time)) {
             printf("%011ld %d died\n", philo->current_time - philo->launch_time, philo->id);
             mutex_des(philo, philo->philo_count);
-            exit(0);
+            exit(0); // ATTENTION EXIT VITALE QUI FAUT CHERCHER A ENLEVER 
         }
         if (last_meal_time != philo->last_meal) {
             //printf("Philosopher %d started eating at %ld ms\n", philo->id, philo->last_meal);
@@ -62,7 +92,7 @@ void *monitor_philo(void *arg) {
         }
         usleep(1000); // Attendre 10ms avant de vérifier à nouveau
     }
-    return NULL;
+	return NULL;
 }
 
 
@@ -142,7 +172,7 @@ void	philo_eat(t_philo *philo) // attention probleme de décalage d'une ms
 	{
 		printf("%ld %d died\n", philo->time_to_die, philo->id);
 		mutex_des(philo, philo->philo_count);
-		exit(0);
+		exit(0); // ATTENTION A ENLEVER
 	}
 	if (philo->left_fork < philo->right_fork)
 	{
@@ -205,7 +235,7 @@ void	philo_eat(t_philo *philo) // attention probleme de décalage d'une ms
 }
 
 
-void	*philo_life(void *arg) // gro delbor jcomprend r // surement plus simple avec des tableaux
+void	*philo_life(void *arg) 
 {
 	t_philo	*philo;
 
@@ -221,9 +251,12 @@ void	*philo_life(void *arg) // gro delbor jcomprend r // surement plus simple av
 		philo_sleep(philo);
 		philo_think(philo);
 	}
+	if (philo->end == 0)
+		end_of_thread(philo);
 	printf("end of thread\n");
-	mutex_des(philo, philo->philo_count);
-	exit(0); // peut etre interdit
+	//mutex_des(philo, philo->philo_count);
+	//exit(0); // peut etre interdit
+	return (NULL);
 }
 t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sleep, int must_eat) // pue la merde
 {
@@ -259,8 +292,11 @@ t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sle
 		philo[i].time_to_sleep = time_to_sleep;
 		philo[i].time_to_die = time_to_die;
 		philo[i].forks = forks;
-		if (must_eat)
-			philo[i].must_eat = must_eat;
+		philo[i].launch_time = 0;
+		philo[i].last_meal = 0;
+		philo[i].last_used_fork = -1;
+		philo[i].must_eat = must_eat;
+		philo[i].end = 0;
 		pthread_mutex_init(&philo[i].eat_mutex, NULL);
 		pthread_create(&philo[i].monitor_thread, NULL, monitor_philo, &philo[i]);
 		pthread_create(&philo[i].thread, NULL, philo_life, &philo[i]);
@@ -288,6 +324,7 @@ int	main(int ac, char **av)// main qui pue la classe
 
 	if (ac == 5 || ac == 6) // a changer
 	{
+		must_eat = 0;
 		nb = ft_atoi(av[1]);
 		die_time = ft_atoi(av[2]); // atoi doit peut etre gerer les long pour les ms
 		time_to_eat = ft_atoi(av[3]);
@@ -300,7 +337,9 @@ int	main(int ac, char **av)// main qui pue la classe
 		philo = init_philo(nb, die_time,time_to_eat, time_to_sleep, must_eat);
 		if (!philo)
 			return (1);
+
+	
 		mutex_des(philo, nb); // mdr comme si ca leakait pas 
-		//free(philo); // spiderman holding the trains by the strings
+		free(philo); // spiderman holding the trains by the strings
 	}
 } // minimalisme a la steve jobs
