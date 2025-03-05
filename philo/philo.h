@@ -27,6 +27,9 @@ typedef struct s_philo
 	int last_used_fork; // a voir si on garde
 	int must_eat; // nombre de repas a faire
 	int end;
+	int dead;
+	pthread_mutex_t meal_mutex;
+	pthread_mutex_t dead_mutex;
 	pthread_mutex_t eat_mutex; // jsp ski branle la mais c est surement important
 	pthread_mutex_t	*forks; // sera surement useless
 	pthread_t monitor_thread;
