@@ -3,11 +3,11 @@ NAME = philo
 
 # Compilateur et options de compilation
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror
+CFLAGS = -O0 -g3 -Wall -Wextra -Werror
 
 
 # attention au wildcard qui ne sont pas accepté et dangereux
-SRCS = main.c ft_atoi.c
+SRCS = main_copy.c ft_atoi.c
 
 # Générer les noms des fichiers objets correspondants
 OBJS = $(SRCS:.c=.o)

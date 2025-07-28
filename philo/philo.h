@@ -34,5 +34,8 @@ typedef struct s_philo
 	pthread_mutex_t	*forks; // sera surement useless
 	pthread_t monitor_thread;
 	pthread_t thread; // c est le bordel mais insh on va y arriver
+	int *simulation_stop;          // Pointeur vers variable partagée
+    pthread_mutex_t *stop_mutex;   // Pointeur vers mutex partagé
+    pthread_mutex_t *print_mutex;  // Pointeur vers mutex d'affichage
 } t_philo;
 

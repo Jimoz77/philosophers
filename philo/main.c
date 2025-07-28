@@ -6,30 +6,30 @@
 /*   By: jimpa <jimpa@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 17:19:38 by jimpa             #+#    #+#             */
-/*   Updated: 2025/03/04 19:53:06 by jimpa            ###   ########.fr       */
+/*   Updated: 2025/07/04 16:48:33 by jimpa            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "philo.h"
 
-int someone_dead(void *arg)
+int someone_dead(t_philo *base_philo, int philo_count)
 {
-
-	int i = 0;
-	int result = 0;
-	t_philo *philo = (t_philo *)arg;
-	pthread_mutex_lock(&philo->dead_mutex);
-	while(i < philo->philo_count)
-	{
-		//printf("philo[%d].dead = %d\n", i, philo[i].dead);
-		if (philo[i].dead == 1)
-		{
-			result = 1;
-		}
-		i++;
-	}
-	pthread_mutex_unlock(&philo->dead_mutex);
-	return (result);
+    int i = 0;
+    int result = 0;
+    
+    while(i < philo_count)
+    {
+        pthread_mutex_lock(&base_philo[i].dead_mutex);
+        if (base_philo[i].dead == 1)
+        {
+            result = 1;
+            pthread_mutex_unlock(&base_philo[i].dead_mutex);
+            break;
+        }
+        pthread_mutex_unlock(&base_philo[i].dead_mutex);
+        i++;
+    }
+    return (result);
 }
 
 void *is_dead(void *arg)
@@ -47,18 +47,23 @@ void *is_dead(void *arg)
 	return (NULL);
 }
 
-int	checkif_end(void *arg)
+int checkif_end(void *arg)
 {
-	t_philo *philo = (t_philo *)arg;
-	int i = 0;
-	
-	while (i < philo->philo_count)
-	{
-		if(philo[i].end == 1)
-			return (1);
-		i++;
-	}
-	return (0);
+    t_philo *philo = (t_philo *)arg;
+    int i = 0;
+    int result = 0;
+    
+    while (i < philo->philo_count)
+    {
+        // Si vous avez un mutex pour 'end', sinon supprimez ces lignes
+        if (philo[i].end == 1)
+        {
+            result = 1;
+            break;
+        }
+        i++;
+    }
+    return (result);
 }
 void *end_of_thread(void *arg)
 {
@@ -108,16 +113,16 @@ int time_to_die(long last_meal, long time_to_die, long current_time, long launch
 	//printf("| last_meal = %ld |\n", last_meal); */
 	return(diff >= time_to_die);
 }
-void *monitor_philo(void *arg) {
+void *monitor_philo(void *arg){
     t_philo *philo = (t_philo *)arg;
     long last_meal_time = philo->last_meal;
 	if(!philo->launch_time)
 		philo->launch_time = get_current_time_in_ms();
 
-    while (checkif_end(arg) == 0 && someone_dead(philo) != 1) {
+    while (checkif_end(arg) == 0 && someone_dead(philo, philo->philo_count) != 1) {
         philo->current_time = get_current_time_in_ms();
 		
-        if (someone_dead(philo) != 1 && time_to_die(philo->last_meal, philo->time_to_die, get_current_time_in_ms(), philo->launch_time)) {
+        if (someone_dead(philo, philo->philo_count) != 1 && time_to_die(philo->last_meal, philo->time_to_die, get_current_time_in_ms(), philo->launch_time)) {
             printf("%011ld %d died\n", philo->current_time - philo->launch_time, philo->id);
             is_dead(philo);
 			return NULL; // ATTENTION EXIT VITALE QUI FAUT CHERCHER A ENLEVER 
@@ -184,7 +189,7 @@ t_philo *find_philo_to_eat(t_philo *philos, int philo_count) {
 } */
 void   philo_think(t_philo *philo) // la meilleur fonc du projet
 {
-	if (someone_dead(philo) != 1 && philo->dead != 1)
+	if (someone_dead(philo, philo->philo_count) != 1 && philo->dead != 1)
 	{
 		philo->current_time = get_current_time_in_ms();
 		usleep(100);
@@ -194,7 +199,7 @@ void   philo_think(t_philo *philo) // la meilleur fonc du projet
 }
 void  philo_sleep(t_philo *philo) // béton
 {
-	if (someone_dead(philo) != 1 && philo->dead != 1)
+	if (someone_dead(philo, philo->philo_count) != 1 && philo->dead != 1)
 	{
 		philo->current_time = get_current_time_in_ms();
 		printf("%ld %d is sleeping\n",philo->current_time - philo->launch_time, philo->id); // verifier si mettre apres le usleep
@@ -247,13 +252,13 @@ void	philo_eat(t_philo *philo) // attention probleme de décalage d'une ms
 		pthread_mutex_lock(&philo->forks[philo->left_fork]);
 	}
  */
-	if (someone_dead(philo) != 1 && philo->dead != 1)
+	if (someone_dead(philo, philo->philo_count) != 1 && philo->dead != 1)
 	{
 		pthread_mutex_lock(&philo->forks[first_fork]);
 		pthread_mutex_lock(&philo->forks[second_fork]);
 		//philo->last_used_fork = second_fork;
 		//pthread_mutex_lock(&philo->eat_mutex); 
-		if(someone_dead(philo) == 1)
+		if(someone_dead(philo, philo->philo_count) == 1)
 		{
 			pthread_mutex_unlock(&philo->forks[first_fork]);
 			pthread_mutex_unlock(&philo->forks[second_fork]);
@@ -299,23 +304,23 @@ void	*philo_life(void *arg)
 	if(!philo->launch_time)
 		philo->launch_time = get_current_time_in_ms();
 	//pthread_mutex_unlock(&philo->eat_mutex); // a tester
-	 while (someone_dead(philo) != 1  && (philo->eat_count < philo->must_eat || philo->must_eat == 0))
+	 while (someone_dead(philo, philo->philo_count) != 1  && (philo->eat_count < philo->must_eat || philo->must_eat == 0))
 	{
-		if(someone_dead(philo) != 1 && first == 0)
+		if(someone_dead(philo, philo->philo_count) != 1 && first == 0)
 			philo_eat(philo);
 		else
 			return (NULL);
-		if (someone_dead(philo) != 1 && first == 0)
+		if (someone_dead(philo, philo->philo_count) != 1 && first == 0)
 			philo_sleep(philo);
 		else
 			return (NULL);
-		if(someone_dead(philo) != 1 && first == 0)
+		if(someone_dead(philo, philo->philo_count) != 1 && first == 0)
 			philo_think(philo);
 		else
 			return (NULL);
 	}
 
-	if (philo->end == 0 && someone_dead(philo) != 1 && first == 0)
+	if (philo->end == 0 && someone_dead(philo, philo->philo_count) != 1 && first == 0)
 	{
 		first = 1;
 		end_of_thread(philo);
@@ -332,7 +337,7 @@ t_philo	*init_philo(int nb, long time_to_die, long time_to_eat, long time_to_sle
 
 	i = 0;
 
-	philo = malloc(sizeof(t_philo) * nb + 1);
+	philo = malloc(sizeof(t_philo) * nb);
 	if (!philo)
 		return (NULL);
 	forks = malloc(sizeof(pthread_mutex_t) * nb);
