@@ -1,16 +1,37 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   main_copy.c                                        :+:      :+:    :+:   */
+/*   main.c                                             :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: jimpa <jimpa@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 17:19:38 by jimpa             #+#    #+#             */
-/*   Updated: 2025/07/28 20:23:08 by jimpa            ###   ########.fr       */
+/*   Updated: 2025/08/12 12:05:06 by jimpa            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "philo.h"
+
+int	is_all_digits(char **av)
+{
+	int	i;
+	int	j;
+
+	j = 1;
+	i = 0;
+	while (av[j])
+	{
+		while (av[j][i])
+		{
+			if ((av[j][i]) && ((av[j][i] > '!' && av[j][i] < '0' ) || (av[j][i] > '9' && av[j][i] < 127)))
+				return (1);
+			i++;
+		}
+		i = 0;
+		j++;
+	}
+	return (0);
+}
 
 void	*global_monitor(void *arg)
 {
@@ -71,8 +92,11 @@ int	main(int ac, char **av)
 		v.time_to_eat = ft_atoi(av[3]);
 		v.time_to_sleep = ft_atoi(av[4]);
 		if (ac == 6)
-		{
 			v.must_eat = ft_atoi(av[5]);
+		if (is_all_digits(av) == 1 || v.nb == 0)
+		{
+			printf("invalid arguments\n");
+			return (1);
 		}
 		philo = init_philo(v);
 		if (!philo)
